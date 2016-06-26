@@ -1,22 +1,22 @@
-from stack import Stack
 from sys import argv
-from code import Code
-
-stkoff = Stack()
 
 LOAD_CONSTANT = 0x64
 LOAD_NAME = 0x65
+STORE_NAME = 0x5a
 PRINT_ITEM = 0x47
 PRINT_NEWLINE = 0x48
+COMPARE_OP = 0x6b
 BINARY_ADD = 0x17
+BINARY_MULTIPLY = 0x14
+BINARY_SUBTRACT = 0x18
+POP_JUMP_IF_FALSE = 0x72
+POP_BLOCK = 0x57
 MAKE_FUNCTION = 0x84
 RETURN_VALUE = 0x53
 CALL_FUNCTION = 0x83
 LOAD_FAST = 0x7c
 STORE_FAST = 0x7d
 LOAD_GLOBAL = 0x74
-POP_TOP = 0x1
-
 
 TYPE_TUPLE = 0x28
 TYPE_INTEGER = 0x69
@@ -28,61 +28,6 @@ TYPE_SREF = 0x52
 FUNCTION_START = 0x43
 
 HAVE_ARG = 90
-
-def printitem(current):
-    print stkoff.get_top_n(0),
-    return current + 1
-
-
-def loadconst(codeobj, current):
-    oparg = codeobj.get_oparg(current)
-    stkoff.push(codeobj.consts[oparg])
-    return current + 3
-   
-def storefast(objcode, current):
-    oparg = objcode.get_oparg(current)
-    objcode.varnames[oparg] = stkoff.pop()
-    return current + 3
-
-def loadfast(objcode, current):
-    oparg = objcode.get_oparg(current)
-    stkoff.push(objcode.varnames[oparg])
-    return current + 3        
-
-def binaryadd(current):
-	tos= stkoff.pop()
-	tos1 = stkoff.pop()
-	stkoff.push(tos1 + tos)
-	return current + 1 
-
-def makefunction(objcode, current):
-	return current + 9
-
-def loadname(objcode, current):
-    oparg = objcode.get_oparg(current)
-    name = objcode.names[oparg]
-    if type(name) == int:
-        stkoff.push(name)
-    else:
-        stkoff.push(objcode.names[oparg][0])
-    return current + 3
-
-def printnewline(current):
-    print
-    return current + 1
-
-
-
-operations = {
-    BINARY_ADD: binaryadd,
-    LOAD_NAME: loadname,
-    LOAD_FAST: loadfast,
-    LOAD_CONSTANT: loadconst,
-    STORE_FAST: storefast,
-    PRINT_ITEM: printitem,
-    PRINT_NEWLINE: printnewline,
-    MAKE_FUNCTION: makefunction
-}
 
 class Stack(object):
     def __init__(self):
@@ -106,11 +51,311 @@ class Stack(object):
     def print_stack(self):
         print self.stack
 
+stk = Stack()
+
+def binaryadd(current):
+    tos = stk.pop()
+    tos1 = stk.pop()
+    stk.push(tos1 + tos)
+    return current + 1
 
 
-INT_LIMIT = 2 ** 31
+def binarymul(current):
+    tos = stk.pop()
+    tos1 = stk.pop()
+    stk.push(tos1 * tos)
+    return current + 1
 
-def read_bytes(filename):
+
+def binarysub(current):
+    tos = stk.pop()
+    tos1 = stk.pop()
+    stk.push(tos1 - tos)
+    return current + 1
+
+
+def printitem(current):
+    print stk.get_top_n(0),
+    return current + 1
+
+
+def printnewline(current):
+    print
+    return current + 1
+
+
+def loadname(objcode, current):
+    oparg = objcode.getoparg(current)
+    name = objcode.names[oparg]
+    if type(name) == int:
+        stk.push(name)
+    else:
+        stk.push(objcode.names[oparg][0])
+    return current + 3
+
+
+def loadconst(objcode, current):
+    oparg = objcode.getoparg(current)
+    stk.push(objcode.consts[oparg])
+    return current + 3
+
+
+def loadglobal(objcode, current):
+    oparg = objcode.getoparg(current)
+    stk.push(objcode.names[oparg][0])
+    return current + 3
+
+
+def loadfast(objcode, current):
+    oparg = objcode.getoparg(current)
+    stk.push(objcode.varnames[oparg])
+    return current + 3
+
+
+def storename(objcode, current):
+    oparg = objcode.getoparg(current)
+    objcode.names[oparg] = stk.pop()
+    return current + 3
+
+
+def storefast(objcode, current):
+    oparg = objcode.getoparg(current)
+    objcode.varnames[oparg] = stk.pop()
+    return current + 3
+
+
+def popblock(current):
+    return current + 1
+
+
+def popjumpiffalse(objcode, current):
+    if not stk.pop():
+        return objcode.getoparg(current)
+    else:
+        return current + 3
+
+
+def makefunction(objcode, current):
+    return current + 9
+
+
+def lessthan(op1, op2):
+    return op1 < op2
+
+
+def lessequal(op1, op2):
+    return op1 <= op2
+
+
+def equal(op1, op2):
+    return op1 == op2
+
+
+
+comparisons = {
+    0: lessthan,
+    1: lessequal,
+    2: equal
+}
+
+
+def compareop(objcode, current):
+    top = stk.pop()
+    top1 = stk.pop()
+    oparg = objcode.getoparg(current)
+    stk.push(comparisons[oparg](top1, top))
+    return current + 3
+
+
+
+operations = {
+    BINARY_ADD: binaryadd,
+    BINARY_SUBTRACT: binarysub,
+    BINARY_MULTIPLY: binarymul,
+    LOAD_NAME: loadname,
+    LOAD_FAST: loadfast,
+    LOAD_CONSTANT: loadconst,
+    LOAD_GLOBAL: loadglobal,
+    STORE_NAME: storename,
+    STORE_FAST: storefast,
+    PRINT_ITEM: printitem,
+    PRINT_NEWLINE: printnewline,
+    POP_JUMP_IF_FALSE: popjumpiffalse,
+    COMPARE_OP: compareop,
+    MAKE_FUNCTION: makefunction
+}
+
+
+names = {}
+name_count = 0
+
+
+class Code(object):
+
+    def __init__(self, pyclist, current=0):
+        self.pyclist = pyclist
+        self.current = current
+        self.code = self.fun_code()
+        self.consts = self.fun_consts()
+        self.names = self.fun_names()
+        self.varnames = self.fun_varnames()
+        self.name = self.fun_name()
+
+    def getname(self):
+        return self.name
+
+    def getcurrent(self):
+        return self.current
+
+    def getpyclist(self):
+        return self.pyclist
+
+    def getopcode(self, current):
+        return self.code[current]
+
+    def getoparg(self, current):
+        return decimal(self.code, current)
+
+    def Isend(self, current):
+        if current >= len(self.code):
+            return True
+        else:
+            return False
+
+    def fun_code(self):
+        pyclist = self.pyclist
+        current = startofcode(pyclist, self.current)
+        end = current + decimal(pyclist, current-5, 4)
+        code = []
+        while current < end:
+            if not is_func_def(current, pyclist):
+                if havearg(pyclist[current]):
+                    code.extend(pyclist[current:current+3])
+                    current += 3
+                else:
+                    code.append(pyclist[current])
+                    current += 1
+            else:
+                code.append(MAKE_FUNCTION)
+                code.extend([0] * 8)
+                current += 9
+
+        self.current = current
+        return code
+
+    def fun_consts(self):
+        current = self.current
+        pyclist = self.pyclist
+        num_co = decimal(pyclist, current, 4)
+        current += 5
+        consts = []
+        for dummy in range(num_co):
+            if pyclist[current] == TYPE_INTEGER:
+                consts.append(decimal(pyclist, current, 4))
+                current += 5
+            elif pyclist[current] == TYPE_NONE:
+                consts.append(0)
+                current += 1
+            elif pyclist[current] == TYPE_CODE:
+                objcode = Code(pyclist, current)
+                f_index = objcode.getname()
+                consts.append(objcode)
+                names[f_index][0] = objcode
+                current = end_of_code(pyclist, current)
+
+        self.current = current
+        return consts
+
+    def fun_names(self):
+        global name_count
+        current = self.current
+        pyclist = self.pyclist
+        n_names = decimal(pyclist, current)
+        func_index = 0
+        current += 5
+        co_names = {}
+        index = 0
+        for dummy in range(n_names):
+            if (pyclist[current] == TYPE_INTERN):
+                names[name_count] = [0]
+                co_names[index] = names[name_count]
+                name_count += 1
+                index += 1
+                current = skip_element(pyclist, current)
+            elif (pyclist[current] == TYPE_SREF):
+                func_index = decimal(pyclist, current)
+                co_names[index] = names[func_index]
+                index += 1
+                current += 5
+            else:
+                current += 1
+
+        self.current = current
+        return co_names
+
+    def fun_varnames(self):
+        global name_count
+        current = self.current
+        pyclist = self.pyclist
+        varnames = []
+        n_varnames = decimal(pyclist, current, 4)
+        current += 5
+        for dummy in range(n_varnames):
+            varnames.append(0)
+            if pyclist[current] == TYPE_INTERN:
+                names[name_count] = [0]
+                name_count += 1
+                current = skip_element(pyclist,  current)
+            elif pyclist[current] == TYPE_SREF:
+                current += 5
+            else:
+                current += 1
+
+        self.current = current
+        return varnames
+
+    def fun_name(self):
+        global name_count
+        current = self.current
+        pyclist = self.pyclist
+        n_field = 0
+        while True:
+                if pyclist[current] == TYPE_TUPLE:
+                    n_field += 1
+                if n_field == 2:
+                    break
+                current += 1
+
+        current += 5
+        current = skip_element(pyclist, current)
+        self.current = current
+        if pyclist[current] == TYPE_INTERN:
+            names[name_count] = [0]
+            name_count += 1
+            return name_count - 1
+
+        else:
+            return decimal(pyclist, current, 4)
+
+    def view(self):
+        print showpyc(self.code)
+        print len(self.consts), 'constants'
+        for index in range(len(self.consts)):
+            if type(self.consts[index]) == int:
+                print self.consts[index]
+            else:
+                self.consts[index].view()
+        print self.names
+        print self.varnames
+        print self.name
+        print 'global names'
+        print names
+
+
+limit = 2 ** 20
+
+
+def readbytes(filename):
     with open(filename, "rb") as file_h:
         while True:
             chunk = file_h.read()
@@ -121,31 +366,31 @@ def read_bytes(filename):
                 break
 
 
-def get_pycfile(filename):
-    lst = list(read_bytes(filename))
+def getpyclist(filename):
+    lst = list(readbytes(filename))
     return lst
 
 
-def show_pyc(lst):
+def showpyc(lst):
     return [hex(num) for num in lst]
 
 
-def decimal(pycfile, current, num_byte=2):
+def decimal(pyc_list, current, num_byte=2):
     value = 0
     factor = 0
     for index in range(num_byte):
-        value |= pycfile[current+index+1] << factor
+        value |= pyc_list[current+index+1] << factor
         factor += 8
-    if value >= INT_LIMIT:
-        value = value - 2 * INT_LIMIT
+    if value >= limit:
+        value = value - 2 * limit
     return value
 
 
-def start_of_code(pycfile, current=0):
-    while (pycfile[current] != TYPE_CODE and
-            pycfile[current+17] != TYPE_STRING):
+def startofcode(pyc_list, current=0):
+    while (pyc_list[current] != TYPE_CODE and
+            pyc_list[current+17] != TYPE_STRING):
         current += 1
-    if current == len(pycfile) - 1:
+    if current == len(pyc_list) - 1:
         raise Exception("no code segment in the rest of the pyc")
     return current + 22
 
@@ -155,50 +400,40 @@ def skip_element(pycbuf, current):
     return current + leng + 5
 
 
-def end_of_code(pycfile, current=0):
+def end_of_code(pyc_list, current=0):
+    current += 17  
 
-    current += 17  # now cur is at byte code s:73 , start of the code string
-
-    current = skip_element(pycfile, current)  # skipping the code string
-
-    # skipping the co_consts field
-    n_const = decimal(pycfile, current, 4)
+    current = skip_element(pyc_list, current)  
+    n_const = decimal(pyc_list, current, 4)
     current += 5
     for dummy in range(n_const):
-        if pycfile[current] == TYPE_INTEGER:
+        if pyc_list[current] == TYPE_INTEGER:
             current += 5
-        elif pycfile[current] == TYPE_NONE:
+        elif pyc_list[current] == TYPE_NONE:
             current += 1
-        elif pycfile[current] == TYPE_CODE:
-            current = end_of_code(pycfile, current)
+        elif pyc_list[current] == TYPE_CODE:
+            current = end_of_code(pyc_list, current)
         else:
             current += 1
 
-    # skip 4 (:28 s that is co_names, varnames, cellvars, freevars
     n_const = 0
     while True:
-            if pycfile[current] == TYPE_TUPLE:
+            if pyc_list[current] == TYPE_TUPLE:
                 n_const += 1
             if n_const == 4:
                 break
             current += 1
 
     current += 5
-    # skip filenmae
-    current = skip_element(pycfile, current)
+    current = skip_element(pyc_list, current)
+    current = skip_element(pyc_list, current)
 
-    # skip function name
-    current = skip_element(pycfile, current)
-
-    # skip first line number
     current += 4
-
-    # skip lnotab
-    current = skip_element(pycfile, current)
+    current = skip_element(pyc_list, current)
     return current
 
 
-def have_arg(opcode):
+def havearg(opcode):
     if opcode < HAVE_ARG:
         return False
     else:
@@ -216,214 +451,34 @@ def get_op_arg(pycbuf, current):
     oparg = decimal(pycbuf, current)
     return oparg
 
-
-# named objects of the form name : object
-names = {}
-name_cnt = 0
-
-class Code(object):
-    
-
-    def __init__(self, pyclist, current=0):
-        
-        self.pyclist = pyclist
-        self.current = current
-        self.code = self.code()
-        self.consts = self.consts()
-        self.names = self.names()
-        self.varnames = self.varnames()
-        self.name = self.name()
-
-    def get_name(self):
-        return self.name
-
-    def get_cur(self):
-        return self.current
-
-    def get_pyclist(self):
-        return self.pyclist
-
-    def get_opcode(self, current):
-        return self.code[current]
-
-    def get_oparg(self, current):
-        return decimal(self.code, current)
-
-    def is_end(self, current):
-        if current >= len(self.code):
-            return True
-        else:
-            return False
-
-    def code(self):
-        pyclist = self.pyclist
-        current = start_of_code(pyclist, self.current)
-        end = current + decimal(pyclist, current-5, 4)
-        code = []
-        while current < end:
-            if not is_func_def(current, pyclist):
-                if have_arg(pyclist[current]):
-                    code.extend(pyclist[current:current+3])
-                    current += 3
-                else:
-                    code.append(pyclist[current])
-                    current += 1
-            else:
-                code.append(MAKE_FUNCTION)
-                code.extend([0] * 8)
-                current += 9
-
-        self.current = current
-        return code
-
-    def consts(self):
-        current = self.current
-        pyclist = self.pyclist
-        num_co = decimal(pyclist, current, 4)
-        current += 5
-        consts = []
-        for dummy in range(num_co):
-            if pyclist[current] == TYPE_INTEGER:
-                consts.append(decimal(pyclist, current, 4))
-                current += 5
-            elif pyclist[current] == TYPE_NONE:
-                consts.append(0)
-                current += 1
-            elif pyclist[current] == TYPE_CODE:
-                objcode = Code(pyclist, current)
-                f_index = objcode.get_name()
-                consts.append(objcode)
-                names[f_index][0] = objcode
-                current = end_of_code(pyclist, current)
-
-        self.current = current
-        return consts
-
-    def names(self):
-        global name_cnt
-        current = self.current
-        pyclist = self.pyclist
-        n_names = decimal(pyclist, current)
-        func_index = 0
-        current += 5
-        co_names = {}
-        index = 0
-        for dummy in range(n_names):
-            if (pyclist[current] == TYPE_INTERN):
-                names[name_cnt] = [0]
-                co_names[index] = names[name_cnt]
-                name_cnt += 1
-                index += 1
-                current = skip_element(pyclist, current)
-            elif (pyclist[current] == TYPE_SREF):
-                func_index = decimal(pyclist, current)
-                co_names[index] = names[func_index]
-                index += 1
-                current += 5
-            else:
-                current += 1
-
-        self.current = current
-        return co_names
-
-    def varnames(self):
-        global name_cnt
-        current = self.current
-        pyclist = self.pyclist
-        varnames = []
-        n_varnames = decimal(pyclist, current, 4)
-        current += 5
-        for dummy in range(n_varnames):
-            varnames.append(0)
-            if pyclist[current] == TYPE_INTERN:
-                names[name_cnt] = [0]
-                name_cnt += 1
-                current = skip_element(pyclist,  current)
-            elif pyclist[cur] == TYPE_SREF:
-                current += 5
-            else:
-                current += 1
-
-        self.current = current
-        return varnames
-
-    def name(self):
-        global name_cnt
-        current = self.current
-        pyclist = self.pyclist
-        n_field = 0
-        # skip 2 (:28 s that is cellvars and freevars
-        while True:
-                if pyclist[current] == TYPE_TUPLE:
-                    n_field += 1
-                if n_field == 2:
-                    break
-                current += 1
-
-        current += 5
-        # skip filenmae
-        current = skip_element(pyclist, current)
-        self.current = current
-        # getting the index of the name  of the code
-        if pyclist[current] == TYPE_INTERN:
-            names[name_cnt] = [0]
-            name_cnt += 1
-            return name_cnt - 1
-
-        else:
-            return decimal(pyclist, current, 4)
-
-    def view(self):
-        print "****************"
-        print show_pyc(self.code)
-        print len(self.consts), 'constants'
-        for index in range(len(self.consts)):
-            if type(self.consts[index]) == int:
-                print self.consts[index]
-            else:
-                self.consts[index].view()
-        print self.names
-        print self.varnames
-        print self.name
-        print 'global names'
-        print names
-        print '--------------------------------'
-
-
 def call_function(objcode, current):
-    argc = objcode.get_oparg(current)
-    func = stkoff.get_top_n(argc)
+    argc = objcode.getoparg(current)
+    func = stk.get_top_n(argc)
 
-    # backup func's local vars
     bkup_locals = func.varnames[:]
 
     while argc:
         argc -= 1
-        func.varnames[argc] = stkoff.pop()
+        func.varnames[argc] = stk.pop()
 
-    stkoff.pop()
+    stk.pop()
     execute(func)
-
-    # restore func's local vars
     func.varnames = bkup_locals[:]
-
     return current + 3
 
 
 def execute(objcode):
     current = 0
-    while not objcode.is_end(current):
-        opcode = objcode.get_opcode(current)
-
+    while not objcode.Isend(current):
+        opcode = objcode.getopcode(current)
         if opcode == CALL_FUNCTION:
             current = call_function(objcode, current)
             continue
 
         if opcode == RETURN_VALUE:
             return
-
         try:
-            if have_arg(opcode):
+            if havearg(opcode):
                 current = operations[opcode](objcode, current)
             else:
                 current = operations[opcode](current)
@@ -434,23 +489,15 @@ def execute(objcode):
 
 
 def execute_pyc(pyc_file):
-    # getting the bytecode as a list of bytes
-    pyc_lst = get_pycfile(pyc_file)
-
-    # getting the codeobject from the pyc list
+    pyc_lst = getpyclist(pyc_file)
     objcode = Code(pyc_lst)
 
-    # executing the code object
     print
     execute(objcode)
     print
 
 
 def main():
-    if len(argv) != 2 or '.pyc' not in argv[1]:
-        print 'usage: pyvm.py filename.pyc'
-
-    else:
         pyc_file = argv[1]
         execute_pyc(pyc_file)
 
