@@ -1,0 +1,55 @@
+void call_function(struct code_obj* pobj, int cur)
+{
+int argc = get_element(&(pobj->code), cur+1);
+struct code_obj* pfun = (struct code_obj*) get_top_n(argc);
+int arg = 0;
+
+int length =  pfun->varnames.length;
+int* locals = malloc(sizeof (int) * length);
+
+/* backup function’s local vars */
+while(length–)
+locals[length] = get_element(&pfun->varnames, length);
+
+/* getting values for parameters */
+while(argc–) {
+arg = pop();
+set_element(&(pfun->varnames), argc, arg);
+}
+/* popping the function from the stack */
+pop();
+
+execute(pfun);
+
+/* restore function’s local vars */
+length = pfun->varnames.length;
+while(length–)
+set_element(&pfun->varnames, length, locals[length]);
+}
+
+In Python it looked like this:
+
+def call_function(code_obj, cur):
+“”” executes the function “””
+
+#(top of stack – argc) th item is the function’s code_object
+argc = code_obj.get_oparg(cur)
+func = stk.get_top_n(argc)
+
+# backup func’s local vars
+bkup_locals = func.varnames[:]
+
+#getting the arguments to local variables
+while argc:
+argc -= 1
+func.varnames[argc] = stk.pop()
+
+stk.pop();
+execute(func);
+
+# restore func’s local vars
+func.varnames = bkup_locals[:]
+
+return cur + 3
+
+
